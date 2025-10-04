@@ -254,7 +254,7 @@ class SlugModel(models.Model):
     def save(self, *args, **kwargs):
         """
         Переопределяем метод save().
-        Автоматически генерируем slug из названия, если slug пустой.
+        Автоматически генерируем slug из названия с транслитерацией кириллицы.
         """
         from django.utils.text import slugify
 
@@ -265,21 +265,30 @@ class SlugModel(models.Model):
             slug_source = self.get_slug_source()
 
             if slug_source:
-                # slugify() — преобразует строку в slug
-                # "Маска Cressi" → "maska-cressi"
-                # allow_unicode=True — разрешить русские буквы (транслитерация)
-                self.slug = slugify(slug_source, allow_unicode=True)
+                # Пытаемся транслитерировать кириллицу в латиницу
+                try:
+                    from transliterate import translit
+                    # translit преобразует: "Маска" -> "Maska"
+                    transliterated = translit(slug_source, 'ru', reversed=True)
+                    base_slug = slugify(transliterated)
+                except Exception:
+                    # Если транслитерация не удалась (не русский текст или библиотека не установлена)
+                    # используем обычный slugify
+                    base_slug = slugify(slug_source)
 
-                # Проверка уникальности slug
-                # Если такой slug уже есть, добавляем номер: "maska-cressi-2"
-                original_slug = self.slug
+                slug = base_slug
                 counter = 1
 
-                # Проверяем существует ли объект с таким slug
-                # self.__class__ — это класс модели (Product, Category, и т.д.)
-                while self.__class__.objects.filter(slug=self.slug).exists():
-                    self.slug = f"{original_slug}-{counter}"
+                # Проверка уникальности slug в рамках магазина
+                # Если такой slug уже есть, добавляем номер: "maska-cressi-2"
+                while self.__class__.objects.filter(
+                    store=self.store,
+                    slug=slug
+                ).exclude(pk=self.pk).exists():
+                    slug = f"{base_slug}-{counter}"
                     counter += 1
+
+                self.slug = slug
 
         # Вызываем оригинальный save()
         super().save(*args, **kwargs)
@@ -343,7 +352,7 @@ class BaseModel(TenantModel, SoftDeleteModel, SlugModel):
     - Привязка к магазину (TenantModel)
     - Timestamps (created, updated) 
     - Soft delete (is_deleted)
-    - Slug для URL
+    - Slug для URL с транслитерацией
 
     Большинство моделей Vendaro будут наследоваться от этой.
 
@@ -363,7 +372,7 @@ class BaseModel(TenantModel, SoftDeleteModel, SlugModel):
     - store (связь с магазином)
     - created, updated (даты)
     - is_deleted, deleted_at (мягкое удаление)
-    - slug (для URL)
+    - slug (для URL с автотранслитерацией)
     """
 
     # Используем кастомный менеджер для фильтрации удалённых записей
@@ -397,7 +406,7 @@ class BaseModel(TenantModel, SoftDeleteModel, SlugModel):
 # - product.created (дата создания)
 # - product.updated (дата изменения)
 # - product.is_deleted (флаг удаления)
-# - product.slug (URL slug)
+# - product.slug (URL slug с транслитерацией)
 # - Product.objects.all() (только не удалённые)
 # - Product.objects.deleted() (только удалённые)
 # - product.delete() (мягкое удаление)

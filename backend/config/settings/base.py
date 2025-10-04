@@ -87,10 +87,12 @@ INSTALLED_APPS = [
     # ========================================
     # Встроенные приложения Django
     # ========================================
-    'django.contrib.admin',          # Админ-панель Django (/admin/)
-    'django.contrib.auth',           # Система аутентификации и пользователей
     # Система типов контента (связи между моделями)
     'django.contrib.contenttypes',
+    'django.contrib.auth',           # Система аутентификации и пользователей
+    'django.contrib.admin',          # Админ-панель Django (/admin/)
+
+
     # Сессии пользователей (хранение состояния)
     'django.contrib.sessions',
     'django.contrib.messages',       # Система сообщений (flash messages)
@@ -153,6 +155,8 @@ MIDDLEWARE = [
 
     # XFrameOptionsMiddleware — защита от clickjacking
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    'apps.core.middleware.TenantMiddleware',
 ]
 
 # ============================================
