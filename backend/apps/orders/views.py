@@ -14,7 +14,7 @@ from .serializers import (
 )
 
 
-class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+class OrderViewSet(viewsets.ModelViewSet):
     """
     API для заказов.
 
@@ -25,6 +25,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     lookup_field = 'order_number'
+    http_method_names = ['get', 'post']  # Разрешаем только GET и POST
 
     def get_permissions(self):
         """Создание заказа доступно всем, просмотр только авторизованным"""
@@ -33,17 +34,13 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        """
-        Возвращает заказы текущего пользователя.
-
-        Фильтрует по:
-        - Магазину (request.store)
-        - Пользователю (request.user)
-        """
-        return Order.objects.filter(
-            store=self.request.store,
-            user=self.request.user
-        ).prefetch_related('items').order_by('-created')
+        """Возвращает заказы текущего пользователя"""
+        if self.request.user.is_authenticated:
+            return Order.objects.filter(
+                store=self.request.store,
+                user=self.request.user
+            ).prefetch_related('items').order_by('-created')
+        return Order.objects.none()
 
     def get_serializer_class(self):
         """Выбирает сериализатор в зависимости от действия"""
@@ -56,18 +53,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         """
         Создание заказа из корзины.
 
-        POST /api/orders/create/
-        Body: {
-            "first_name": "Иван",
-            "last_name": "Петров",
-            "email": "ivan@example.com",
-            "phone": "+79001234567",
-            "shipping_address_line1": "ул. Ленина, д. 10, кв. 5",
-            "shipping_city": "Москва",
-            "shipping_postal_code": "101000",
-            "shipping_country": "RU",
-            "customer_note": "Позвонить за час"
-        }
+        POST /api/orders/create_order/
         """
         serializer = CreateOrderSerializer(
             data=request.data, context={'request': request})
