@@ -128,6 +128,7 @@ class Cart(TimeStampedModel):
         Используется после оформления заказа.
         """
         self.items.all().delete()
+        self.save()
 
     def merge_with(self, other_cart):
         """
