@@ -17,7 +17,7 @@ from .base import *
 DEBUG = True
 
 # ALLOWED_HOSTS — для разработки разрешаем localhost
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'test.local']
 
 # ============================================
 # УСТАНОВЛЕННЫЕ ПРИЛОЖЕНИЯ (дополнения)

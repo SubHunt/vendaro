@@ -15,6 +15,7 @@ from .serializers import (
     ProductDetailSerializer,
     ProductReviewSerializer,
 )
+from .filters import ProductFilter
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -99,6 +100,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['name', 'description', 'sku']
     ordering_fields = ['created', 'retail_price', 'rating', 'sales_count']
     ordering = ['-created']
+    filterset_class = ProductFilter
 
     def get_queryset(self):
         """

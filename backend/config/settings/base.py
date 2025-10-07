@@ -429,3 +429,13 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@vendaro.ru')
 
 # SITE_URL — URL сайта (для ссылок в email)
 SITE_URL = env('SITE_URL', default='http://localhost:8000')
+
+# DRF SPECTACULAR (Swagger)
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Vendaro CMS API',
+    'DESCRIPTION': 'Multi-tenant E-commerce Platform API',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+}
