@@ -89,26 +89,29 @@ class CartViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
 
         product_id = serializer.validated_data['product_id']
+        variant_id = serializer.validated_data.get('variant_id')
         quantity = serializer.validated_data['quantity']
         product = serializer.product
-
+        variant = getattr(serializer, 'variant', None)
         cart = self.get_or_create_cart(request)
 
         # Проверяем есть ли товар уже в корзине
         cart_item, created = CartItem.objects.get_or_create(
             cart=cart,
             product=product,
+            variant=variant,
             defaults={'quantity': quantity}
         )
 
         if not created:
             # Товар уже есть - увеличиваем количество
             cart_item.quantity += quantity
-
+            # Проверка stock (учитываем вариант)
+            available_stock = variant.stock if variant else product.stock
             # Проверяем наличие на складе
-            if product.track_stock and cart_item.quantity > product.stock:
+            if cart_item.quantity > available_stock:
                 return Response(
-                    {'error': f'Недостаточно товара на складе. Доступно: {product.stock}'},
+                    {'error': f'Недостаточно товара на складе. Доступно: {available_stock}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -116,7 +119,7 @@ class CartViewSet(viewsets.ViewSet):
 
         # Возвращаем обновлённую корзину
         cart_serializer = CartSerializer(cart, context={'request': request})
-        return Response(cart_serializer.data, status=status.HTTP_200_OK)
+        return Response(cart_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['patch'], url_path='items/(?P<item_id>[^/.]+)')
     def update_item(self, request, item_id=None):

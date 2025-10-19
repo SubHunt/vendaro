@@ -7,6 +7,14 @@ config/settings/development.py — Настройки для локальной 
 
 # Импортируем ВСЕ настройки из base.py
 from .base import *
+import sys
+
+# ============================================
+# ПРОВЕРКА НА ТЕСТЫ
+# ============================================
+
+# Определяем запущены ли тесты
+TESTING = 'pytest' in sys.modules or 'test' in sys.argv
 
 # ============================================
 # РЕЖИМ ОТЛАДКИ
@@ -23,33 +31,37 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'test.local']
 # УСТАНОВЛЕННЫЕ ПРИЛОЖЕНИЯ (дополнения)
 # ============================================
 
-# Добавляем приложения только для разработки
-INSTALLED_APPS += [
-    # Django Debug Toolbar — панель отладки
-    # Показывает SQL запросы, время выполнения, кэш
-    'debug_toolbar',
-
-    # Django Extensions — дополнительные команды
-    # shell_plus, show_urls, и т.д.
-    'django_extensions',
-]
+# Добавляем Debug Toolbar ТОЛЬКО если НЕ тесты
+if not TESTING:
+    INSTALLED_APPS += [
+        'debug_toolbar',
+        'django_extensions',
+    ]
+# INSTALLED_APPS += [
+#     'debug_toolbar',
+#     'django_extensions',
+# ]
 
 # ============================================
 # MIDDLEWARE (дополнения)
 # ============================================
 
 # Добавляем Debug Toolbar middleware в начало
-MIDDLEWARE = [
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-] + MIDDLEWARE[1:]
+# Добавляем Debug Toolbar middleware ТОЛЬКО если НЕ тесты
+if not TESTING:
+    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+
+# MIDDLEWARE = [
+#     'debug_toolbar.middleware.DebugToolbarMiddleware',
+#     'django.middleware.security.SecurityMiddleware',
+#     'django.contrib.sessions.middleware.SessionMiddleware',
+#     'corsheaders.middleware.CorsMiddleware',
+#     'django.middleware.common.CommonMiddleware',
+#     'django.middleware.csrf.CsrfViewMiddleware',
+#     'django.contrib.auth.middleware.AuthenticationMiddleware',
+#     'django.contrib.messages.middleware.MessageMiddleware',
+#     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+# ] + MIDDLEWARE[1:]
 
 # ============================================
 # EMAIL (для разработки)

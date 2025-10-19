@@ -1,10 +1,12 @@
 """
 apps/cart/serializers.py — Сериализаторы для Cart API
+
+Обновлено: добавлена поддержка вариантов товаров.
 """
 
 from rest_framework import serializers
 from .models import Cart, CartItem
-from apps.products.models import Product
+from apps.products.models import Product, ProductVariant
 
 
 class CartItemProductSerializer(serializers.ModelSerializer):
@@ -14,7 +16,8 @@ class CartItemProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'slug', 'main_image', 'stock', 'available']
+        fields = ['id', 'name', 'slug', 'main_image',
+                  'stock', 'available', 'has_variants']
 
     def get_main_image(self, obj):
         """Главное фото товара"""
@@ -26,11 +29,40 @@ class CartItemProductSerializer(serializers.ModelSerializer):
         return None
 
 
+class CartItemVariantSerializer(serializers.ModelSerializer):
+    """Сериализатор варианта для корзины"""
+
+    size_value = serializers.CharField(source='size.value', read_only=True)
+    size_type = serializers.CharField(source='size.type', read_only=True)
+
+    class Meta:
+        model = ProductVariant
+        fields = ['id', 'size_value', 'size_type', 'stock', 'sku']
+
+
 class CartItemSerializer(serializers.ModelSerializer):
-    """Сериализатор для товара в корзине"""
+    """
+    Сериализатор для товара в корзине.
+
+    Пример JSON:
+    {
+        "id": 1,
+        "product": {...},
+        "variant": {"id": 5, "size_value": "M", "stock": 10},
+        "quantity": 2,
+        "price": 15000.00,
+        "subtotal": 30000.00,
+        "is_available": true
+    }
+    """
 
     product = CartItemProductSerializer(read_only=True)
     product_id = serializers.IntegerField(write_only=True)
+
+    variant = CartItemVariantSerializer(read_only=True)
+    variant_id = serializers.IntegerField(
+        write_only=True, required=False, allow_null=True)
+
     subtotal = serializers.DecimalField(
         source='get_subtotal',
         max_digits=10,
@@ -38,16 +70,31 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    # is_available = serializers.BooleanField(
+    #     source='is_available',
+    #     read_only=True
+    # )
+    is_available = serializers.SerializerMethodField()
+    available_stock = serializers.SerializerMethodField()
+    # available_stock = serializers.IntegerField(
+    #     source='get_available_stock',
+    #     read_only=True
+    # )
+
     class Meta:
         model = CartItem
         fields = [
             'id',
             'product',
             'product_id',
+            'variant',
+            'variant_id',
             'quantity',
             'price',
             'is_wholesale',
             'subtotal',
+            'is_available',
+            'available_stock',
             'created',
             'updated',
         ]
@@ -64,7 +111,35 @@ class CartItemSerializer(serializers.ModelSerializer):
         except Product.DoesNotExist:
             raise serializers.ValidationError('Товар не найден или недоступен')
 
+        # Сохраняем для использования в validate()
+        self.product = product
         return value
+
+    def validate_variant_id(self, value):
+        """Проверка что вариант существует и доступен"""
+        if value is None:
+            return None
+
+        try:
+            variant = ProductVariant.objects.get(
+                id=value,
+                is_active=True
+            )
+        except ProductVariant.DoesNotExist:
+            raise serializers.ValidationError(
+                'Вариант не найден или недоступен')
+
+        # Сохраняем для использования в validate()
+        self.variant = variant
+        return value
+
+    def get_is_available(self, obj):
+        """Проверка доступности товара"""
+        return obj.is_available()
+
+    def get_available_stock(self, obj):
+        """Получить доступный stock"""
+        return obj.get_available_stock()
 
     def validate_quantity(self, value):
         """Проверка количества"""
@@ -74,6 +149,59 @@ class CartItemSerializer(serializers.ModelSerializer):
         if value > 9999:
             raise serializers.ValidationError('Слишком большое количество')
         return value
+
+    def validate(self, attrs):
+        """
+        Комплексная валидация.
+
+        Проверяет:
+        - Если товар has_variants - требуется variant_id
+        - Если товар без вариантов - variant_id не нужен
+        - Соответствие варианта товару
+        - Наличие на складе
+        """
+        product_id = attrs.get('product_id')
+        variant_id = attrs.get('variant_id')
+        quantity = attrs.get('quantity', 1)
+
+        # Получаем product и variant из validate_*
+        product = getattr(self, 'product', None)
+        variant = getattr(self, 'variant', None)
+
+        if not product:
+            return attrs
+
+        # Проверка: товар с вариантами требует variant_id
+        if product.has_variants and not variant_id:
+            raise serializers.ValidationError({
+                'variant_id': 'Для этого товара необходимо выбрать размер'
+            })
+
+        # Проверка: товар без вариантов не должен иметь variant_id
+        if not product.has_variants and variant_id:
+            raise serializers.ValidationError({
+                'variant_id': 'Этот товар не имеет вариантов'
+            })
+
+        # Проверка: вариант принадлежит товару
+        if variant and variant.product_id != product.id:
+            raise serializers.ValidationError({
+                'variant_id': 'Этот вариант не принадлежит выбранному товару'
+            })
+
+        # Проверка наличия на складе
+        if variant:
+            if variant.stock < quantity:
+                raise serializers.ValidationError({
+                    'quantity': f'Недостаточно товара на складе. Доступно: {variant.stock}'
+                })
+        else:
+            if product.track_stock and product.stock < quantity:
+                raise serializers.ValidationError({
+                    'quantity': f'Недостаточно товара на складе. Доступно: {product.stock}'
+                })
+
+        return attrs
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -106,9 +234,19 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 class AddToCartSerializer(serializers.Serializer):
-    """Сериализатор для добавления товара в корзину"""
+    """
+    Сериализатор для добавления товара в корзину.
+
+    Пример запроса:
+    {
+        "product_id": 1,
+        "variant_id": 5,  // опционально, только для товаров с вариантами
+        "quantity": 2
+    }
+    """
 
     product_id = serializers.IntegerField()
+    variant_id = serializers.IntegerField(required=False, allow_null=True)
     quantity = serializers.IntegerField(default=1, min_value=1, max_value=9999)
 
     def validate_product_id(self, value):
@@ -124,18 +262,65 @@ class AddToCartSerializer(serializers.Serializer):
         except Product.DoesNotExist:
             raise serializers.ValidationError('Товар не найден или недоступен')
 
-        # Сохраняем товар для использования в create()
         self.product = product
         return value
 
-    def validate(self, attrs):
-        """Проверка наличия товара на складе"""
-        quantity = attrs.get('quantity', 1)
+    def validate_variant_id(self, value):
+        """Проверка варианта"""
+        if value is None:
+            return None
 
-        if hasattr(self, 'product'):
-            if self.product.track_stock and self.product.stock < quantity:
+        try:
+            variant = ProductVariant.objects.get(
+                id=value,
+                is_active=True
+            )
+        except ProductVariant.DoesNotExist:
+            raise serializers.ValidationError(
+                'Вариант не найден или недоступен')
+
+        self.variant = variant
+        return value
+
+    def validate(self, attrs):
+        """Проверка наличия товара на складе и соответствия варианта"""
+        quantity = attrs.get('quantity', 1)
+        variant_id = attrs.get('variant_id')
+
+        product = getattr(self, 'product', None)
+        variant = getattr(self, 'variant', None)
+
+        if not product:
+            return attrs
+
+        # Проверка: товар с вариантами требует variant_id
+        if product.has_variants and not variant_id:
+            raise serializers.ValidationError({
+                'variant_id': 'Для этого товара необходимо выбрать размер'
+            })
+
+        # Проверка: товар без вариантов не должен иметь variant_id
+        if not product.has_variants and variant_id:
+            raise serializers.ValidationError({
+                'variant_id': 'Этот товар не имеет вариантов'
+            })
+
+        # Проверка: вариант принадлежит товару
+        if variant and variant.product_id != product.id:
+            raise serializers.ValidationError({
+                'variant_id': 'Этот вариант не принадлежит выбранному товару'
+            })
+
+        # Проверка наличия на складе
+        if variant:
+            if variant.stock < quantity:
                 raise serializers.ValidationError({
-                    'quantity': f'Недостаточно товара на складе. Доступно: {self.product.stock}'
+                    'quantity': f'Недостаточно товара на складе. Доступно: {variant.stock}'
+                })
+        else:
+            if product.track_stock and product.stock < quantity:
+                raise serializers.ValidationError({
+                    'quantity': f'Недостаточно товара на складе. Доступно: {product.stock}'
                 })
 
         return attrs
@@ -150,8 +335,19 @@ class UpdateCartItemSerializer(serializers.Serializer):
         """Проверка количества и наличия на складе"""
         cart_item = self.context.get('cart_item')
 
-        if cart_item and cart_item.product.track_stock:
-            if cart_item.product.stock < value:
+        if not cart_item:
+            return value
+
+        # Проверка наличия на складе
+        if cart_item.variant:
+            # Товар с вариантом
+            if cart_item.variant.stock < value:
+                raise serializers.ValidationError(
+                    f'Недостаточно товара на складе. Доступно: {cart_item.variant.stock}'
+                )
+        else:
+            # Обычный товар
+            if cart_item.product.track_stock and cart_item.product.stock < value:
                 raise serializers.ValidationError(
                     f'Недостаточно товара на складе. Доступно: {cart_item.product.stock}'
                 )

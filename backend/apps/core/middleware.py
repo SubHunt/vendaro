@@ -17,7 +17,7 @@ class TenantMiddleware(MiddlewareMixin):
     1. Извлекаем домен из HTTP_HOST (например: deepreef.local, deepreef.ru)
     2. Ищем магазин с таким доменом в БД
     3. Добавляем магазин в request.store
-    4. Если магазин не найден или неактивен - 404
+    4. Если магазин не найден - используем fallback (первый активный магазин)
 
     Использование в views:
     def my_view(request):
@@ -53,8 +53,17 @@ class TenantMiddleware(MiddlewareMixin):
         try:
             store = Store.objects.get(domain=domain, is_active=True)
         except Store.DoesNotExist:
-            # Магазин не найден - показываем 404
-            raise Http404(f"Магазин с доменом '{domain}' не найден")
+            # FALLBACK: Если магазин не найден по домену (например localhost),
+            # берём первый активный магазин
+            # Это полезно для разработки и тестирования
+            store = Store.objects.filter(is_active=True).first()
+
+            if not store:
+                # Совсем нет магазинов в БД
+                raise Http404(
+                    f"Магазин с доменом '{domain}' не найден. "
+                    "Создайте магазин в админке: /admin/stores/store/add/"
+                )
 
         # Сохраняем магазин в request
         # Теперь во всех views доступен: request.store

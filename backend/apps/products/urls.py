@@ -1,39 +1,33 @@
 """
 apps/products/urls.py — URL маршруты для Products API
+
+Используем ViewSets с DefaultRouter для автоматической генерации URL.
 """
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, ProductViewSet, ProductReviewViewSet
+from . import views
 
-# DefaultRouter автоматически создаёт URL для ViewSet
-# Генерирует стандартные REST endpoints:
-# - GET /categories/ - список
-# - GET /categories/{slug}/ - детали
-# - и т.д.
+# Создаём роутер для автоматической генерации URL
 router = DefaultRouter()
-router.register(r'categories', CategoryViewSet, basename='category')
-router.register(r'', ProductViewSet, basename='product')
-router.register(r'reviews', ProductReviewViewSet, basename='review')
 
-app_name = 'products'
+# Регистрируем ViewSets
+router.register(r'categories', views.CategoryViewSet, basename='category')
+# Товары на корневом уровне
+router.register(r'', views.ProductViewSet, basename='product')
+router.register(r'reviews', views.ProductReviewViewSet, basename='review')
 
+# URL patterns
 urlpatterns = [
+    # Подключаем все маршруты из роутера
+    # Автоматически создаются:
+    # GET    /api/products/                     - список товаров
+    # GET    /api/products/{slug}/              - детали товара
+    # GET    /api/products/{slug}/reviews/      - отзывы товара
+    # POST   /api/products/{slug}/add_review/   - добавить отзыв
+    # GET    /api/products/categories/          - список категорий
+    # GET    /api/products/categories/{slug}/   - детали категории
+    # GET    /api/products/categories/tree/     - дерево категорий
+    # GET    /api/products/reviews/             - все отзывы
     path('', include(router.urls)),
 ]
-# """
-# apps/products/urls.py — URL маршруты для Products API
-# """
-
-# from django.urls import path
-# from apps.products import views
-
-# app_name = 'products'
-
-# urlpatterns = [
-#     path('categories/', views.CategoryListView.as_view(), name='category-list'),
-#     path('', views.ProductListView.as_view(), name='product-list'),
-#     path('<slug:slug>/', views.ProductDetailView.as_view(), name='product-detail'),
-#     path('<int:product_id>/reviews/',
-#          views.ProductReviewListView.as_view(), name='product-reviews'),
-# ]

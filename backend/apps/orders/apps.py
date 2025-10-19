@@ -24,4 +24,3 @@ class OrdersConfig(AppConfig):
         """
         # Импортируем signals (это активирует их)
         import apps.orders.signals
-        # pass
