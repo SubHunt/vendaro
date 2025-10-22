@@ -1,14 +1,15 @@
 """
 apps/products/views.py — Views для Products API
 
-ViewSets обрабатывают HTTP запросы и возвращают данные.
+ИСПРАВЛЕНО: Добавлен Prefetch для вариантов с фильтрацией активных
 """
 
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Category, Product, ProductReview
+from django.db import models
+from .models import Category, Product, ProductReview, ProductVariant
 from .serializers import (
     CategorySerializer,
     ProductListSerializer,
@@ -109,6 +110,8 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         Оптимизация:
         - select_related() - загружает связанные объекты (категория, магазин)
         - prefetch_related() - загружает связанные списки (фото, отзывы)
+
+        ИСПРАВЛЕНО: Добавлен Prefetch для вариантов с фильтрацией только активных
         """
         queryset = Product.objects.filter(
             store=self.request.store,
@@ -118,7 +121,13 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
             'store'
         ).prefetch_related(
             'images',
-            'reviews'
+            'reviews',
+            models.Prefetch(
+                'variants',
+                queryset=ProductVariant.objects.filter(
+                    is_active=True
+                ).select_related('size').order_by('size__order')
+            )
         )
 
         # Фильтрация по цене

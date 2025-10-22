@@ -16,12 +16,6 @@ User = get_user_model()
 
 
 @pytest.fixture
-def api_client():
-    """API клиент"""
-    return APIClient()
-
-
-@pytest.fixture
 def store(db):
     """Тестовый магазин"""
     return Store.objects.create(
@@ -32,6 +26,29 @@ def store(db):
         enable_wholesale=True,
         wholesale_discount_percent=15,
     )
+
+
+# Для тестов
+# @pytest.fixture
+# def api_client(store):
+#     """API клиент с установленным store"""
+#     from rest_framework.test import APIClient
+
+#     client = APIClient()
+#     # Устанавливаем HTTP_HOST для middleware
+#     client.defaults['HTTP_HOST'] = store.domain
+#     return client
+@pytest.fixture
+def api_client():
+    """API клиент"""
+    return APIClient()
+
+
+@pytest.fixture
+def authenticated_client(api_client, user):
+    """Аутентифицированный клиент"""
+    api_client.force_authenticate(user=user)
+    return api_client
 
 
 @pytest.fixture
@@ -105,13 +122,6 @@ def user(db):
         email='user@test.com',
         password='testpass123',
     )
-
-
-@pytest.fixture
-def authenticated_client(api_client, user):
-    """Аутентифицированный клиент"""
-    api_client.force_authenticate(user=user)
-    return api_client
 
 
 # ============================================

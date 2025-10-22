@@ -1,5 +1,9 @@
 """
 apps/cart/views.py — Views для Cart API
+
+ИСПРАВЛЕНО:
+1. update_item() возвращает CartItemSerializer
+2. list() всегда возвращает 200 (даже для пустой корзины)
 """
 
 from rest_framework import viewsets, status
@@ -68,10 +72,13 @@ class CartViewSet(viewsets.ViewSet):
         Получение корзины.
 
         GET /api/cart/
+
+        ИСПРАВЛЕНО: Всегда возвращает 200, даже если корзина пустая
         """
         cart = self.get_or_create_cart(request)
         serializer = CartSerializer(cart, context={'request': request})
-        return Response(serializer.data)
+        # Явно указываем status=200 для пустой корзины
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'])
     def add(self, request):
@@ -81,8 +88,11 @@ class CartViewSet(viewsets.ViewSet):
         POST /api/cart/add/
         Body: {
             "product_id": 1,
+            "variant_id": 5,  // опционально, для товаров с вариантами
             "quantity": 2
         }
+
+        ОБНОВЛЕНО: Добавлена поддержка variant_id
         """
         serializer = AddToCartSerializer(
             data=request.data, context={'request': request})
@@ -93,22 +103,24 @@ class CartViewSet(viewsets.ViewSet):
         quantity = serializer.validated_data['quantity']
         product = serializer.product
         variant = getattr(serializer, 'variant', None)
+
         cart = self.get_or_create_cart(request)
 
-        # Проверяем есть ли товар уже в корзине
+        # Проверяем есть ли товар+вариант уже в корзине
         cart_item, created = CartItem.objects.get_or_create(
             cart=cart,
             product=product,
-            variant=variant,
+            variant=variant,  # ← Учитываем вариант
             defaults={'quantity': quantity}
         )
 
         if not created:
             # Товар уже есть - увеличиваем количество
             cart_item.quantity += quantity
+
             # Проверка stock (учитываем вариант)
             available_stock = variant.stock if variant else product.stock
-            # Проверяем наличие на складе
+
             if cart_item.quantity > available_stock:
                 return Response(
                     {'error': f'Недостаточно товара на складе. Доступно: {available_stock}'},
@@ -128,11 +140,17 @@ class CartViewSet(viewsets.ViewSet):
 
         PATCH /api/cart/items/{item_id}/
         Body: {"quantity": 3}
+
+        ИСПРАВЛЕНО: Возвращает CartItemSerializer (содержит quantity)
         """
         cart = self.get_or_create_cart(request)
 
         try:
-            cart_item = CartItem.objects.get(id=item_id, cart=cart)
+            cart_item = CartItem.objects.select_related(
+                'product',
+                'variant',
+                'variant__size'
+            ).get(id=item_id, cart=cart)
         except CartItem.DoesNotExist:
             return Response(
                 {'error': 'Товар не найден в корзине'},
@@ -148,9 +166,10 @@ class CartViewSet(viewsets.ViewSet):
         cart_item.quantity = serializer.validated_data['quantity']
         cart_item.save()
 
-        # Возвращаем обновлённую корзину
-        cart_serializer = CartSerializer(cart, context={'request': request})
-        return Response(cart_serializer.data)
+        # ИСПРАВЛЕНИЕ: Возвращаем CartItemSerializer (содержит quantity на верхнем уровне)
+        item_serializer = CartItemSerializer(
+            cart_item, context={'request': request})
+        return Response(item_serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['delete'], url_path='items/(?P<item_id>[^/.]+)')
     def remove_item(self, request, item_id=None):

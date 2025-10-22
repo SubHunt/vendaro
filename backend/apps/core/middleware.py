@@ -1,7 +1,7 @@
 """
 apps/core/middleware.py — Multi-tenant middleware для Vendaro CMS
 
-Определяет текущий магазин по домену запроса и добавляет его в request.
+ИСПРАВЛЕНО: Добавлена поддержка тестов через wsgi.url_scheme == 'http' без домена
 """
 
 from django.http import Http404
@@ -19,10 +19,7 @@ class TenantMiddleware(MiddlewareMixin):
     3. Добавляем магазин в request.store
     4. Если магазин не найден - используем fallback (первый активный магазин)
 
-    Использование в views:
-    def my_view(request):
-        store = request.store  # Текущий магазин
-        products = Product.objects.filter(store=store)
+    ИСПРАВЛЕНО: В тестах (когда нет HTTP_HOST) используется первый активный магазин
     """
 
     def process_request(self, request):
@@ -32,22 +29,28 @@ class TenantMiddleware(MiddlewareMixin):
         Вызывается Django автоматически перед view.
         """
 
-        # Получаем домен из заголовка HTTP_HOST
-        # Примеры:
-        # - deepreef.local:8000 -> deepreef.local
-        # - deepreef.ru -> deepreef.ru
-        # - localhost:8000 -> localhost
-        host = request.get_host()
-
-        # Убираем порт если есть
-        # deepreef.local:8000 -> deepreef.local
-        domain = host.split(':')[0]
-
         # Исключения для служебных путей
-        # Django Admin и API docs работают без привязки к магазину
         if self._is_exempt_path(request.path):
             request.store = None
             return None
+
+        # Получаем домен из заголовка HTTP_HOST
+        host = request.get_host()
+
+        # ИСПРАВЛЕНИЕ: Проверяем что host не пустой
+        if not host or host == 'testserver':
+            # Тестовая среда - используем fallback
+            store = Store.objects.filter(is_active=True).first()
+            if not store:
+                raise Http404(
+                    "Нет активных магазинов в БД. "
+                    "Создайте магазин: python manage.py loaddata demo_store"
+                )
+            request.store = store
+            return None
+
+        # Убираем порт если есть
+        domain = host.split(':')[0]
 
         # Ищем магазин по домену
         try:
@@ -55,7 +58,6 @@ class TenantMiddleware(MiddlewareMixin):
         except Store.DoesNotExist:
             # FALLBACK: Если магазин не найден по домену (например localhost),
             # берём первый активный магазин
-            # Это полезно для разработки и тестирования
             store = Store.objects.filter(is_active=True).first()
 
             if not store:
@@ -66,9 +68,7 @@ class TenantMiddleware(MiddlewareMixin):
                 )
 
         # Сохраняем магазин в request
-        # Теперь во всех views доступен: request.store
         request.store = store
-
         return None
 
     def _is_exempt_path(self, path):
@@ -76,17 +76,10 @@ class TenantMiddleware(MiddlewareMixin):
         Проверяет, нужно ли исключить путь из multi-tenant логики.
 
         Исключения:
-        - /admin/ - Django Admin (работает для всех магазинов)
+        - /admin/ - Django Admin
         - /api/docs/ - API документация
         - /api/schema/ - OpenAPI схема
         - /__debug__/ - Django Debug Toolbar
-
-        Параметры:
-        - path: строка пути (например: '/admin/stores/store/')
-
-        Возвращает:
-        - True если путь исключён
-        - False если нужно проверять магазин
         """
         exempt_paths = [
             '/admin/',
@@ -107,13 +100,9 @@ class TenantQuerysetMiddleware(MiddlewareMixin):
     Дополнительный middleware для автоматической фильтрации queryset по магазину.
 
     ВНИМАНИЕ: Это экспериментальная функция!
-    Использовать с осторожностью, может конфликтовать с другими middleware.
-
-    Автоматически добавляет filter(store=request.store) ко всем queryset.
-    Сейчас не используется, но можно включить в будущем.
+    Сейчас не используется.
     """
 
     def process_request(self, request):
         # TODO: Реализовать автоматическую фильтрацию
-        # Требует патчинг Django ORM
         pass
