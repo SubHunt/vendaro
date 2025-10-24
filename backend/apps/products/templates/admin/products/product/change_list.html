@@ -1,0 +1,15 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    
+    {% if show_import_export %}
+    <!-- Кнопка Импорт/Экспорт -->
+    <li>
+        <a href="{% url 'admin:products_product_import' %}" class="addlink" style="background: #417690; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; display: inline-block;">
+            📦 Импорт/Экспорт
+        </a>
+    </li>
+    {% endif %}
+{% endblock %}

@@ -15,6 +15,29 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+# # config/urls.py
+# from django.contrib import admin
+# from django.urls import path, include
+# from django.conf import settings
+# from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+# urlpatterns = [
+#     path('admin/', admin.site.urls),
+#     # Ваши остальные URL-ы
+#     path('api/', include('apps.core.urls')),
+#     # ... другие пути
+#     # API Schema & Swagger
+#     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+#     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'),
+#          name='swagger-ui'),
+# ]
+
+# # Django Debug Toolbar - только для разработки
+# # if settings.DEBUG:
+# #     import debug_toolbar
+# #     urlpatterns = [
+# #         path('__debug__/', include(debug_toolbar.urls)),
+# #     ] + urlpatterns
 # config/urls.py
 from django.contrib import admin
 from django.urls import path, include
@@ -23,18 +46,15 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Ваши остальные URL-ы
     path('api/', include('apps.core.urls')),
-    # ... другие пути
-    # API Schema & Swagger
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'),
          name='swagger-ui'),
 ]
 
-# Django Debug Toolbar - только для разработки
-# if settings.DEBUG:
-#     import debug_toolbar
-#     urlpatterns = [
-#         path('__debug__/', include(debug_toolbar.urls)),
-#     ] + urlpatterns
+# Debug Toolbar - ДОБАВЬТЕ ЭТО:
+if settings.DEBUG and not getattr(settings, 'TESTING', False):
+    import debug_toolbar
+    urlpatterns = [
+        path('__debug__/', include(debug_toolbar.urls)),
+    ] + urlpatterns
